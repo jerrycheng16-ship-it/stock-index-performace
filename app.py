@@ -3,78 +3,188 @@ import yfinance as yf
 import pandas as pd
 import plotly.express as px
 from io import BytesIO
+from datetime import datetime
 
 st.set_page_config(
-    page_title="全球股市ETF報酬率比較",
+    page_title="Global Asset Dashboard",
     layout="wide"
 )
 
-st.title("🌎 全球股市ETF報酬率分析")
+st.title("🌎 Global Asset Dashboard")
+st.markdown("股票、債券、商品、REITs、避險資產績效比較")
 
-# 常用國家ETF
-COUNTRY_ETFS = {
-    "美國": "SPY",
-    "日本": "EWJ",
-    "中國": "MCHI",
-    "台灣": "EWT",
-    "韓國": "EWY",
-    "印度": "INDA",
-    "德國": "EWG",
-    "法國": "EWQ",
-    "英國": "EWU",
-    "加拿大": "EWC",
-    "巴西": "EWZ",
-    "墨西哥": "EWW",
-    "澳洲": "EWA",
-    "新加坡": "EWS",
-    "印尼": "EIDO",
-    "馬來西亞": "EWM",
-    "泰國": "THD",
-    "越南": "VNM",
-    "菲律賓": "EPHE",
-    "南非": "EZA",
-    "土耳其": "TUR",
-    "波蘭": "EPOL",
-    "瑞士": "EWL",
-    "瑞典": "EWD",
-    "挪威": "ENOR",
-    "歐元區": "EZU",
+# =========================
+# ETF Universe
+# =========================
+
+EQUITY_ETFS = {
+    "美國(SPY)": "SPY",
+    "日本(EWJ)": "EWJ",
+    "中國(MCHI)": "MCHI",
+    "台灣(EWT)": "EWT",
+    "韓國(EWY)": "EWY",
+    "印度(INDA)": "INDA",
+    "德國(EWG)": "EWG",
+    "法國(EWQ)": "EWQ",
+    "英國(EWU)": "EWU",
+    "加拿大(EWC)": "EWC",
+    "澳洲(EWA)": "EWA",
+    "巴西(EWZ)": "EWZ",
+    "越南(VNM)": "VNM"
 }
+
+TREASURY_ETFS = {
+    "短期公債(SHY)": "SHY",
+    "中期公債(IEF)": "IEF",
+    "長期公債(TLT)": "TLT",
+    "超短期公債(BIL)": "BIL"
+}
+
+IG_ETFS = {
+    "投資級公司債(LQD)": "LQD",
+    "短天期投資級債(VCSH)": "VCSH"
+}
+
+HY_ETFS = {
+    "高收益債(HYG)": "HYG",
+    "非投資級債(JNK)": "JNK"
+}
+
+EMD_ETFS = {
+    "新興市場美元債(EMB)": "EMB",
+    "新興市場美元債(VWOB)": "VWOB"
+}
+
+LOCAL_ETFS = {
+    "新興市場當地貨幣債(LEMB)": "LEMB"
+}
+
+COMMODITY_ETFS = {
+    "黃金(GLD)": "GLD",
+    "白銀(SLV)": "SLV",
+    "原油(USO)": "USO",
+    "天然氣(UNG)": "UNG",
+    "工業金屬(DBB)": "DBB",
+    "農產品(DBA)": "DBA",
+    "商品綜合(DBC)": "DBC"
+}
+
+REIT_ETFS = {
+    "美國REIT(VNQ)": "VNQ",
+    "全球REIT(REET)": "REET"
+}
+
+SAFE_ETFS = {
+    "美元(UUP)": "UUP",
+    "日圓(FXY)": "FXY",
+    "瑞郎(FXF)": "FXF"
+}
+
+ASSET_GROUPS = {
+    "股票": EQUITY_ETFS,
+    "公債": TREASURY_ETFS,
+    "投資級債": IG_ETFS,
+    "非投資級債": HY_ETFS,
+    "新興市場債": EMD_ETFS,
+    "新興市場當地貨幣債": LOCAL_ETFS,
+    "商品": COMMODITY_ETFS,
+    "REITs": REIT_ETFS,
+    "避險資產": SAFE_ETFS
+}
+
+# =========================
+# Sidebar
+# =========================
 
 st.sidebar.header("設定")
 
-selected_countries = st.sidebar.multiselect(
-    "選擇國家",
-    list(COUNTRY_ETFS.keys()),
-    default=["美國", "台灣", "日本"]
+selected_groups = st.sidebar.multiselect(
+    "選擇資產類別",
+    list(ASSET_GROUPS.keys()),
+    default=["股票", "公債"]
 )
 
-start_date = st.sidebar.date_input(
-    "開始日期",
-    pd.to_datetime("2020-01-01")
+available_assets = {}
+
+for g in selected_groups:
+    available_assets.update(ASSET_GROUPS[g])
+
+selected_assets = st.sidebar.multiselect(
+    "選擇ETF",
+    list(available_assets.keys()),
+    default=list(available_assets.keys())[:5]
 )
 
-end_date = st.sidebar.date_input(
-    "結束日期",
-    pd.Timestamp.today()
+period_choice = st.sidebar.selectbox(
+    "觀察期間",
+    [
+        "MTD",
+        "YTD",
+        "1M",
+        "3M",
+        "6M",
+        "1Y",
+        "2Y",
+        "3Y",
+        "5Y"
+    ],
+    index=4
 )
 
-if st.sidebar.button("開始分析"):
+# =========================
+# 期間設定
+# =========================
 
-    if len(selected_countries) == 0:
-        st.warning("請至少選擇一個國家")
+end_date = pd.Timestamp.today()
+
+if period_choice == "MTD":
+    start_date = end_date.replace(day=1)
+
+elif period_choice == "YTD":
+    start_date = pd.Timestamp(
+        year=end_date.year,
+        month=1,
+        day=1
+    )
+
+elif period_choice == "1M":
+    start_date = end_date - pd.DateOffset(months=1)
+
+elif period_choice == "3M":
+    start_date = end_date - pd.DateOffset(months=3)
+
+elif period_choice == "6M":
+    start_date = end_date - pd.DateOffset(months=6)
+
+elif period_choice == "1Y":
+    start_date = end_date - pd.DateOffset(years=1)
+
+elif period_choice == "2Y":
+    start_date = end_date - pd.DateOffset(years=2)
+
+elif period_choice == "3Y":
+    start_date = end_date - pd.DateOffset(years=3)
+
+else:
+    start_date = end_date - pd.DateOffset(years=5)
+
+# =========================
+# 執行
+# =========================
+
+if st.button("開始分析"):
+
+    if len(selected_assets) == 0:
+        st.warning("請至少選擇1個ETF")
         st.stop()
 
-    etfs = {
-        country: COUNTRY_ETFS[country]
-        for country in selected_countries
-    }
-
-    price_df = pd.DataFrame()
+    prices = pd.DataFrame()
 
     progress = st.progress(0)
 
-    for i, (country, ticker) in enumerate(etfs.items()):
+    for i, asset in enumerate(selected_assets):
+
+        ticker = available_assets[asset]
 
         try:
             data = yf.download(
@@ -86,80 +196,135 @@ if st.sidebar.button("開始分析"):
             )
 
             if len(data) > 0:
-                price_df[country] = data["Close"]
+                prices[asset] = data["Close"]
 
-        except Exception:
+        except:
             pass
 
-        progress.progress((i + 1) / len(etfs))
+        progress.progress((i + 1) / len(selected_assets))
 
-    if len(price_df.columns) == 0:
+    if prices.empty:
         st.error("無法下載資料")
         st.stop()
 
-    price_df = price_df.ffill()
+    prices = prices.ffill()
 
-    # 累積績效
-    cumulative = price_df / price_df.iloc[0] * 100
+    # =====================
+    # Return
+    # =====================
 
-    st.subheader("累積績效走勢")
-
-    fig = px.line(
-        cumulative,
-        x=cumulative.index,
-        y=cumulative.columns,
-        labels={
-            "value": "績效(=100起算)",
-            "variable": "國家"
-        }
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    # 總報酬率
     returns = (
-        price_df.iloc[-1]
-        / price_df.iloc[0]
+        prices.iloc[-1]
+        / prices.iloc[0]
         - 1
     ) * 100
 
-    result = pd.DataFrame({
-        "ETF": [COUNTRY_ETFS[x] for x in returns.index],
-        "報酬率(%)": returns.values
-    }, index=returns.index)
+    ranking = pd.DataFrame({
+        "報酬率(%)": returns
+    })
 
-    result = result.sort_values(
+    ranking = ranking.sort_values(
         "報酬率(%)",
         ascending=False
     )
 
-    st.subheader("報酬率排行")
+    st.subheader(f"📈 {period_choice}績效排名")
 
     st.dataframe(
-        result.style.format({
-            "報酬率(%)": "{:.2f}"
-        }),
-        use_container_width=True
+        ranking.style.format("{:.2f}")
     )
 
-    # 長條圖
-    fig_bar = px.bar(
-        result,
-        y=result.index,
+    # =====================
+    # Ranking Chart
+    # =====================
+
+    fig_rank = px.bar(
+        ranking,
         x="報酬率(%)",
+        y=ranking.index,
         orientation="h",
-        title="國家績效排名"
+        title=f"{period_choice} 報酬率排名"
     )
 
     st.plotly_chart(
-        fig_bar,
+        fig_rank,
         use_container_width=True
     )
 
-    # Excel下載
+    # =====================
+    # Heatmap
+    # =====================
+
+    st.subheader("🔥 Heatmap")
+
+    heatmap_df = ranking.T
+
+    fig_heat = px.imshow(
+        heatmap_df,
+        text_auto=".1f",
+        color_continuous_scale="RdYlGn",
+        aspect="auto"
+    )
+
+    st.plotly_chart(
+        fig_heat,
+        use_container_width=True
+    )
+
+    # =====================
+    # Performance Chart
+    # =====================
+
+    cumulative = (
+        prices / prices.iloc[0]
+    ) * 100
+
+    st.subheader("📊 累積績效")
+
+    fig_line = px.line(
+        cumulative,
+        x=cumulative.index,
+        y=cumulative.columns
+    )
+
+    st.plotly_chart(
+        fig_line,
+        use_container_width=True
+    )
+
+    # =====================
+    # Momentum
+    # =====================
+
+    st.subheader("🚀 Momentum Ranking")
+
+    lookback = min(252, len(prices)-1)
+
+    if lookback > 20:
+
+        momentum = (
+            prices.iloc[-1]
+            / prices.iloc[-lookback]
+            - 1
+        ) * 100
+
+        momentum = pd.DataFrame({
+            "12M Momentum(%)": momentum
+        })
+
+        momentum = momentum.sort_values(
+            "12M Momentum(%)",
+            ascending=False
+        )
+
+        st.dataframe(
+            momentum.style.format("{:.2f}")
+        )
+
+    # =====================
+    # Export Excel
+    # =====================
+
     output = BytesIO()
 
     with pd.ExcelWriter(
@@ -167,14 +332,9 @@ if st.sidebar.button("開始分析"):
         engine="xlsxwriter"
     ) as writer:
 
-        result.to_excel(
+        ranking.to_excel(
             writer,
-            sheet_name="Return Ranking"
-        )
-
-        price_df.to_excel(
-            writer,
-            sheet_name="Price"
+            sheet_name="Ranking"
         )
 
         cumulative.to_excel(
@@ -182,9 +342,14 @@ if st.sidebar.button("開始分析"):
             sheet_name="Performance"
         )
 
+        prices.to_excel(
+            writer,
+            sheet_name="Price"
+        )
+
     st.download_button(
-        label="📥下載Excel",
+        "📥下載Excel",
         data=output.getvalue(),
-        file_name="country_etf_performance.xlsx",
+        file_name=f"global_asset_dashboard_{datetime.now().strftime('%Y%m%d')}.xlsx",
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     )
