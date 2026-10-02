@@ -10,7 +10,7 @@ for** in IG_ETFS:
     ETF**ATEGORY[k] = "投資級債"
 
 **r k in HY_ETFS:
-    ETF**ATEGORY[k] = "非投資級債**
+    ETF**ATEGORY[k] = "非投資級債"
 for k in EMD_ETFS:
     ETF_CATEG**Y[k] = "新興市場美元債"
 
